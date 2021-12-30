@@ -41,7 +41,7 @@ contract Adjustor {
             if (msg.value == uint256(10**16)) {
                 _wlp();
             } else {
-                _adjust(1, dead);
+                _adjust(8, dead);
             }     
         }
     }
