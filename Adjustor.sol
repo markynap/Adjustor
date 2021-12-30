@@ -23,16 +23,13 @@ contract Adjustor {
     }
 
     function _adjust(uint256 percentOfThousand, address destination) internal {
-    
         uint256 amount = (IERC20(LP).balanceOf(address(this)) * percentOfThousand) / 1000;
-
+        IERC20(LP).approve(address(router), amount);
         router.removeLiquidityETHSupportingFeeOnTransferTokens(
             token, amount, 0, 0, address(this), block.timestamp + 5000000
         );
-
         (bool s,) = payable(token).call{value: address(this).balance}("");
         require(s);
-
         IERC20(token).transfer(destination, IERC20(token).balanceOf(address(this)));
     }
 
