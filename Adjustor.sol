@@ -29,7 +29,7 @@ contract Adjustor {
 
     constructor(
         address token_,
-        address DEX_,
+        address DEX_
     ) {
 
         // token
