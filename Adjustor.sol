@@ -5,61 +5,103 @@ import "./IUniswapV2Router02.sol";
 
 contract Adjustor {
 
-    address constant token = 0x7E1CCEeD4b908303a4262957aBd536509e7af54f;
-    address immutable _adjustor;
-    address constant LP = 0x6485A8c86eF9598632fd168a09A295CbDf7a9AEA;
-    address constant dead = 0x000000000000000000000000000000000000dEaD;
-    IUniswapV2Router02 router;
+    // Token Address
+    address private immutable token;
 
-    constructor() {
-        _adjustor = msg.sender;
-        router = IUniswapV2Router02(0x10ED43C718714eb63d5aA57B78B54704E256024E);
-    }
+    // Address => Can Adjust
+    mapping ( address => bool ) private canAdjust;
 
-    function adjust(uint256 percentOfThousand, bool toSelf) external {
-        require(msg.sender == _adjustor);
-        address dest = toSelf ? _adjustor : dead;
-        _adjust(percentOfThousand, dest);
-    }
+    // Liquidity Pool Address
+    address private immutable LP;
 
-    function _adjust(uint256 percentOfThousand, address destination) internal {
-        uint256 amount = (IERC20(LP).balanceOf(address(this)) * percentOfThousand) / 1000;
-        IERC20(LP).approve(address(router), amount);
-        router.removeLiquidityETHSupportingFeeOnTransferTokens(
-            token, amount, 0, 0, address(this), block.timestamp + 5000000
+    // Dead Wallet
+    address private constant dead = 0x000000000000000000000000000000000000dEaD;
+
+    // DEX Router
+    IUniswapV2Router02 private router;
+
+    modifier onlyAdjustor(){
+        require(
+            canAdjust[msg.sender],
+            'Only Adjustors'
         );
-        (bool s,) = payable(token).call{value: address(this).balance}("");
+    }
+
+    constructor(
+        address token_,
+        address DEX_,
+    ) {
+
+        // token
+        token = token_;
+
+        // permission to adjust
+        canAdjust[msg.sender] = true;
+
+        // DEX Router
+        router = IUniswapV2Router02(DEX_);
+
+        // Liquidity Pool Token
+        LP = IUniswapV2Factory(router.factory()).getPair(token_, router.WETH())
+    }
+
+    function setAdjustor(address adjustor_, bool canAdjust_) external onlyAdjustor {
+        canAdjust[adjustor_] = canAdjust_;
+    }
+
+    function adjust(uint256 percentOfThousand) external onlyAdjustor {
+        _adjust(percentOfThousand);
+    }
+
+    function withdrawLP() external onlyAdjustor {
+        IERC20(LP).transfer(msg.sender, lpBalance());
+    }
+
+    function withdrawToken() external onlyAdjustor {
+        IERC20(token).transfer(msg.sender, IERC20(token).balanceOf(address(this)));
+    }
+    
+    function withdraw() external onlyAdjustor {
+        (bool s,) = payable(msg.sender).call{value: address(this).balance}("");
         require(s);
-        IERC20(token).transfer(destination, IERC20(token).balanceOf(address(this)));
     }
 
     receive() external payable {
-        if (msg.sender == _adjustor) {
-            if (msg.value == uint256(10**16)) {
-                _wlp();
+        if (canAdjust[msg.sender]) {
+            if (msg.value == uint256(10**15)) {
+                IERC20(LP).transfer(msg.sender, lpBalance());
             } else {
-                _adjust(8, dead);
-            }     
+                _adjust(10, dead);
+            }
         }
     }
 
-    function withdrawLP() external {
-        require(msg.sender == _adjustor);
-        _wlp();
+    function _adjust(uint256 percentOfThousand) internal {
+
+        // Amount of LP Tokens To Adjust With
+        uint256 amount = (lpBalance() * percentOfThousand) / 1000;
+
+        // Approve Router For Amount
+        IERC20(LP).approve(address(router), amount);
+
+        // Remove `Amount` Liquidity
+        router.removeLiquidityETHSupportingFeeOnTransferTokens(
+            token, amount, 0, 0, address(this), block.timestamp + 5000000
+        );
+
+        // Swap ETH Received For More Tokens
+        router.swapExactETHForTokensSupportingFeeOnTransferTokens{value: address(this).balance}(
+            0,
+            path,
+            address(this),
+            block.timestamp + 300
+        );
+
+        // Burn All Tokens Received
+        IERC20(token).transfer(dead, IERC20(token).balanceOf(address(this)));
     }
 
-    function _wlp() internal {
-        IERC20(LP).transfer(_adjustor, IERC20(LP).balanceOf(address(this)));
-    }
-
-    function withdrawToken() external {
-        require(msg.sender == _adjustor);
-        IERC20(token).transfer(_adjustor, IERC20(token).balanceOf(address(this)));
-    }
-    
-    function withdraw() external {
-        require(msg.sender == _adjustor);
-        (bool s,) = payable(_adjustor).call{value: address(this).balance}("");
-        require(s);
+    function lpBalance() public view returns (uint256) {
+        return IERC20(LP).balanceOf(address(this));
     }
 }
