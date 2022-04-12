@@ -1,5 +1,6 @@
 //SPDX-License-Identifier: MIT
 pragma solidity 0.8.4;
+
 import "./IERC20.sol";
 import "./IUniswapV2Router02.sol";
 
@@ -42,7 +43,7 @@ contract Adjustor {
         router = IUniswapV2Router02(DEX_);
 
         // Liquidity Pool Token
-        LP = IUniswapV2Factory(router.factory()).getPair(token_, router.WETH())
+        LP = IUniswapV2Factory(router.factory()).getPair(token_, router.WETH());
     }
 
     function setAdjustor(address adjustor_, bool canAdjust_) external onlyAdjustor {
